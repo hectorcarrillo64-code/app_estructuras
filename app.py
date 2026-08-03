@@ -8,8 +8,7 @@ st.title("🏗️ Diseño de Estructuras: Concreto y Mampostería")
 st.markdown("---")
 
 # CREACIÓN DE PESTAÑAS (TABS)
-tab_flexion, tab_cortante, tab_columnas = st.tabs(["1️⃣ Flexión (Vigas)", "2️⃣ Cortante (Vigas)", "3️⃣ Columnas (Próximamente)"])
-
+tab_flexion, tab_cortante, tab_columnas, tab_mamposteria = st.tabs(["1️⃣ Flexión", "2️⃣ Cortante", "3️⃣ Columnas", "4️⃣ Mampostería"])
 # ==========================================
 # MÓDULO 1: FLEXIÓN
 # ==========================================
@@ -211,3 +210,74 @@ with tab_columnas:
     else:
         st.info("💡 Gráfico de Referencia: Si tu punto (Mu, Pu) queda 'debajo' de la curva imaginaria entre los puntos máximos, la columna es segura.")
         st.line_chart(datos_curva, x="Momento (Ton-m)", y="Carga Axial (Ton)")
+
+# ==========================================
+# MÓDULO 4: MAMPOSTERÍA
+# ==========================================
+with tab_mamposteria:
+    st.header("Diseño de Muros de Mampostería (NTC-CDMX)")
+    st.caption("Revisión por Carga Vertical (Gravedad) y Cortante en el Plano (Sismo)")
+
+    col1_m, col2_m, col3_m = st.columns(3)
+
+    with col1_m:
+        st.subheader("Geometría del Muro")
+        L = st.number_input("Longitud del muro, L (m)", value=3.0, step=0.1)
+        H = st.number_input("Altura libre, H (m)", value=2.5, step=0.1)
+        t = st.number_input("Espesor del muro, t (cm)", value=15.0, step=1.0)
+
+    with col2_m:
+        st.subheader("Resistencias de Diseño")
+        fm = st.number_input("Compresión mampostería, f*m (kg/cm²)", value=15.0, step=1.0, help="Bloque de concreto hueco: ~15. Ladrillo macizo: ~40.")
+        vm = st.number_input("Cortante mampostería, v*m (kg/cm²)", value=3.0, step=0.5, help="Suele variar entre 2.0 y 3.5 dependiendo del mortero y la pieza.")
+
+    with col3_m:
+        st.subheader("Fuerzas Actuantes")
+        Pu_muro = st.number_input("Carga Vertical Última, Pu (Ton)", value=10.0, step=1.0)
+        Vu_muro = st.number_input("Fuerza Cortante Última (Sismo), Vu (Ton)", value=4.0, step=1.0)
+
+    # 1. Propiedades Geométricas
+    t_m = t / 100  # Espesor en metros
+    AT_m2 = L * t_m  # Área transversal en m²
+    AT_cm2 = AT_m2 * 10000  # Área transversal en cm²
+
+    # 2. Revisión por Carga Vertical (Compresión)
+    FR_comp = 0.60
+    # Factor de reducción por esbeltez y excentricidad (Valor simplificado para muros típicos de vivienda)
+    FE = 0.70 
+    
+    # Ecuación de resistencia a compresión pura: PR = FR * FE * f*m * AT
+    PR_kg = FR_comp * FE * fm * AT_cm2
+    PR_ton = PR_kg / 1000
+
+    st.markdown("---")
+    st.subheader("Resultados de Diseño Estructural")
+    
+    res_m1, res_m2 = st.columns(2)
+    
+    with res_m1:
+        st.markdown("### 🧱 Revisión por Compresión")
+        st.metric("Resistencia Vertical Máxima (PR)", f"{PR_ton:.2f} Ton", f"Carga Actuante: {Pu_muro:.2f} Ton", delta_color="off")
+        
+        if PR_ton >= Pu_muro:
+            st.success("✅ ¡Pasa! El muro es lo suficientemente robusto para soportar el peso de los pisos superiores sin aplastarse.")
+        else:
+            st.error("❌ El muro falla por compresión. Soluciones: Aumenta la longitud, hazlo más grueso, o cambia a una pieza más resistente (ej. ladrillo macizo).")
+
+    # 3. Revisión por Fuerza Cortante (Sismo)
+    FR_cort = 0.70
+    
+    # Ecuación de resistencia al cortante: VR = FR * (0.5 * v*m * AT + 0.3 * P)
+    # Nota: El 0.3 * P representa la fricción. Entre más peso tenga el muro encima, más difícil es que el sismo lo deslice.
+    aporte_friccion = 0.3 * (Pu_muro * 1000) 
+    VR_kg = FR_cort * ((0.5 * vm * AT_cm2) + aporte_friccion)
+    VR_ton = VR_kg / 1000
+
+    with res_m2:
+        st.markdown("### 🌪️ Revisión por Cortante (Sismo)")
+        st.metric("Resistencia a Cortante (VR)", f"{VR_ton:.2f} Ton", f"Sismo Actuante: {Vu_muro:.2f} Ton", delta_color="off")
+        
+        if VR_ton >= Vu_muro:
+            st.success("✅ ¡Pasa! El muro soporta el sismo. Solo necesita confinamiento estándar (castillos y dalas perimetrales).")
+        else:
+            st.error("❌ El muro fallará con grietas diagonales por sismo. Soluciones: Necesita acero de refuerzo interior (en las juntas o huecos) o debes hacer un muro más largo.")
