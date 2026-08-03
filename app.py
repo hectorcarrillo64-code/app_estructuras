@@ -127,7 +127,87 @@ with tab_cortante:
             st.success(f"👷‍♂️ **Recomendación en obra:** Usa estribos del #3 separados a **{math.floor(sep_final)} cm**.")
 
 # ==========================================
-# MÓDULO 3: COLUMNAS (Placeholder)
+# MÓDULO 3: COLUMNAS (Flexocompresión)
 # ==========================================
 with tab_columnas:
-    st.info("Aquí agregaremos el diagrama de interacción para columnas con flexocompresión. ¡Pronto!")
+    st.header("Diseño de Columnas (NTC-CDMX)")
+    st.caption("Revisión por Flexocompresión y Diagrama de Interacción Simplificado")
+
+    col1_c, col2_c, col3_c = st.columns(3)
+    
+    with col1_c:
+        st.subheader("Materiales y Geometría")
+        fc_c = st.number_input("f'c (kg/cm²)", value=250, step=10, key="fc_c")
+        fy_c = st.number_input("fy (kg/cm²)", value=4200, step=100, key="fy_c")
+        b_c = st.number_input("Base, b (cm)", value=40, step=5, key="b_c")
+        h_c = st.number_input("Peralte, h (cm)", value=40, step=5, key="h_c")
+        
+    with col2_c:
+        st.subheader("Acero de Refuerzo")
+        num_varillas = st.number_input("Cantidad total de varillas", value=8, step=2, min_value=4)
+        area_varilla = st.number_input("Área por varilla (cm²)", value=2.85, help="Ej. Varilla #6 = 2.85 cm²")
+        rec_c = st.number_input("Recubrimiento (cm)", value=5, step=1, key="rec_c")
+
+    with col3_c:
+        st.subheader("Cargas Actuantes")
+        Pu = st.number_input("Carga Axial Última, Pu (Ton)", value=100.0, step=10.0)
+        Mu_c = st.number_input("Momento Último, Mu (Ton-m)", value=15.0, step=1.0)
+
+    # 1. Cálculos Preliminares
+    Ag = b_c * h_c  # Área bruta de concreto
+    Ast = num_varillas * area_varilla  # Área total de acero
+    rho_col = Ast / Ag
+
+    FR_c = 0.70  # Factor de resistencia para columnas con estribos (NTC)
+    fc_star_c = 0.80 * fc_c
+    fc_biprima_c = 0.85 * fc_star_c
+
+    # 2. Validaciones Normativas de Cuantía
+    st.markdown("---")
+    st.subheader("1. Revisión de Cuantía de Acero")
+    
+    col_res1, col_res2 = st.columns(2)
+    col_res1.metric("Área de Acero Colocada (Ast)", f"{Ast:.2f} cm²", f"ρ = {rho_col:.4f}")
+    
+    if rho_col < 0.01:
+        col_res2.error("❌ Cuantía menor al 1% mínimo (NTC). Aumenta el número o grosor de varillas.")
+    elif rho_col > 0.06:
+        col_res2.error("❌ Cuantía mayor al 6% máximo (NTC). Mucho acero, la columna estará muy congestionada.")
+    else:
+        col_res2.success("✅ Cuantía de acero dentro de los límites normativos (1% - 6%).")
+
+    # 3. Puntos Clave del Diagrama de Interacción (Simplificado)
+    # Punto 1: Compresión Pura (Po)
+    Po_kg = FR_c * ((fc_biprima_c * (Ag - Ast)) + (fy_c * Ast))
+    Po_ton = Po_kg / 1000
+
+    # Punto 2: Flexión Pura aproximada (M0) - Asumiendo mitad del acero en tensión
+    d_c = h_c - rec_c
+    As_tension = Ast / 2
+    a_flex = (As_tension * fy_c) / (0.85 * fc_biprima_c * b_c)
+    Mo_kgcm = FR_c * As_tension * fy_c * (d_c - (a_flex / 2))
+    Mo_tonm = Mo_kgcm / 100000
+
+    # Punto 3: Punto Balanceado (Aproximación educada para el gráfico)
+    Pb_ton = Po_ton * 0.4  # Típicamente el punto balanceado ocurre al ~40% de Po
+    Mb_tonm = Mo_tonm * 1.5 # El momento balanceado es mayor que el de flexión pura
+
+    # 4. Generación del Gráfico (Diagrama de Interacción)
+    st.markdown("---")
+    st.subheader("2. Diagrama de Interacción (Aproximado)")
+    
+    # Creamos los datos para la "Cebolla" del diagrama
+    datos_curva = [
+        {"Momento (Ton-m)": 0, "Carga Axial (Ton)": Po_ton},          # Compresión Pura
+        {"Momento (Ton-m)": Mb_tonm, "Carga Axial (Ton)": Pb_ton},    # Punto Balanceado
+        {"Momento (Ton-m)": Mo_tonm, "Carga Axial (Ton)": 0},         # Flexión Pura
+    ]
+    
+    # Mostrar si la carga actual está dentro del límite seguro (simplificado)
+    st.write(f"Carga actuante: **Pu = {Pu} Ton** | **Mu = {Mu_c} Ton-m**")
+    
+    if Pu > Po_ton:
+        st.error(f"❌ La columna falla por aplastamiento puro. La resistencia máxima es {Po_ton:.2f} Ton.")
+    else:
+        st.info("💡 Gráfico de Referencia: Si tu punto (Mu, Pu) queda 'debajo' de la curva imaginaria entre los puntos máximos, la columna es segura.")
+        st.line_chart(datos_curva, x="Momento (Ton-m)", y="Carga Axial (Ton)")
