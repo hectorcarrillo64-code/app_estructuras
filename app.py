@@ -1,89 +1,133 @@
 import streamlit as st
 import math
 
-# 1. CONFIGURACIÓN DE LA PÁGINA
+# CONFIGURACIÓN DE LA PÁGINA
 st.set_page_config(page_title="App Diseño Estructural", layout="wide", page_icon="🏗️")
 
 st.title("🏗️ Diseño de Estructuras: Concreto y Mampostería")
 st.markdown("---")
 
-st.header("Módulo 1: Diseño de Vigas de Concreto por Flexión (NTC-CDMX)")
-st.caption("Cálculo de Área de Acero Longitudinal con el Bloque de Whitney")
+# CREACIÓN DE PESTAÑAS (TABS)
+tab_flexion, tab_cortante, tab_columnas = st.tabs(["1️⃣ Flexión (Vigas)", "2️⃣ Cortante (Vigas)", "3️⃣ Columnas (Próximamente)"])
 
-# 2. INPUTS DE USUARIO (Interfaz)
-col1, col2, col3 = st.columns(3)
+# ==========================================
+# MÓDULO 1: FLEXIÓN
+# ==========================================
+with tab_flexion:
+    st.header("Diseño de Vigas por Flexión (NTC-CDMX)")
+    st.caption("Cálculo de Área de Acero Longitudinal con el Bloque de Whitney")
 
-with col1:
-    st.subheader("Materiales")
-    fc = st.number_input("f'c - Resistencia del concreto (kg/cm²)", value=250, step=10)
-    fy = st.number_input("fy - Fluencia del acero (kg/cm²)", value=4200, step=100)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.subheader("Materiales")
+        fc_flex = st.number_input("f'c (kg/cm²)", value=250, step=10, key="fc_flex")
+        fy_flex = st.number_input("fy (kg/cm²)", value=4200, step=100, key="fy_flex")
+    with col2:
+        st.subheader("Geometría")
+        b_flex = st.number_input("Base, b (cm)", value=30, step=5, key="b_flex")
+        h_flex = st.number_input("Peralte Total, h (cm)", value=60, step=5, key="h_flex")
+        rec_flex = st.number_input("Recubrimiento, r (cm)", value=5, step=1, key="rec_flex")
+    with col3:
+        st.subheader("Fuerzas")
+        Mu = st.number_input("Momento Último, Mu (Ton-m)", value=25.0, step=1.0)
+        
+    d_flex = h_flex - rec_flex
+    FR_flex = 0.90 
+    fc_star_flex = 0.80 * fc_flex 
+    fc_biprima = 0.85 * fc_star_flex 
 
-with col2:
-    st.subheader("Geometría de la Sección")
-    b = st.number_input("Base, b (cm)", value=30, step=5)
-    h = st.number_input("Peralte Total, h (cm)", value=60, step=5)
-    rec = st.number_input("Recubrimiento al centroide, r (cm)", value=5, step=1)
+    beta1 = 0.85 if fc_flex <= 280 else max(0.65, 1.05 - (fc_flex / 1400))
+    rho_min = (0.7 * math.sqrt(fc_flex)) / fy_flex 
+    rho_b = (fc_biprima / fy_flex) * ((6000 * beta1) / (6000 + fy_flex))
+    rho_max = 0.75 * rho_b 
 
-with col3:
-    st.subheader("Fuerzas Internas")
-    Mu = st.number_input("Momento Último factorizado, Mu (Ton-m)", value=25.0, step=1.0)
-    
-# 3. LÓGICA DE CÁLCULO (Motor Estructural)
-d = h - rec  # Peralte efectivo
+    Mu_kgcm = Mu * 100000 
+    coeficiente = Mu_kgcm / (FR_flex * b_flex * (d_flex**2) * fc_biprima)
 
-# Factores según NTC-CDMX
-FR = 0.90 # Factor de resistencia para flexión
-fc_star = 0.80 * fc # NTC: f*c = 0.80 f'c
-fc_biprima = 0.85 * fc_star # NTC: f''c = 0.85 f*c
+    try:
+        q = 1 - math.sqrt(1 - (2 * coeficiente))
+        rho_req = q * (fc_biprima / fy_flex)
+        As_req = rho_req * b_flex * d_flex
+        As_min_cm2 = rho_min * b_flex * d_flex
+        As_max_cm2 = rho_max * b_flex * d_flex
+        
+        st.markdown("---")
+        st.subheader("Resultados de Flexión")
+        res_col1, res_col2, res_col3 = st.columns(3)
+        res_col1.metric("Acero Mínimo", f"{As_min_cm2:.2f} cm²", f"ρ = {rho_min:.4f}")
+        res_col2.metric("Acero Requerido (As)", f"{As_req:.2f} cm²", f"ρ = {rho_req:.4f}")
+        res_col3.metric("Acero Máximo", f"{As_max_cm2:.2f} cm²", f"ρ = {rho_max:.4f}")
+        
+        if rho_req < rho_min:
+            st.warning(f"⚠️ Usa el acero mínimo normativo: **{As_min_cm2:.2f} cm²**.")
+        elif rho_req > rho_max:
+            st.error("❌ Falla por compresión (frágil). Aumenta la sección (b, h).")
+        else:
+            st.success("✅ Diseño Satisfactorio y dúctil.")
+    except ValueError:
+        st.error("❌ El Momento es demasiado grande para esta sección. Aumenta b o h.")
 
-# Factor Beta 1 (Depende de la resistencia del concreto)
-if fc <= 280:
-    beta1 = 0.85
-else:
-    beta1 = max(0.65, 1.05 - (fc / 1400))
 
-# Cuantías Reglamentarias
-# Cuantía Mínima (NTC)
-rho_min = (0.7 * math.sqrt(fc)) / fy 
+# ==========================================
+# MÓDULO 2: CORTANTE
+# ==========================================
+with tab_cortante:
+    st.header("Diseño de Vigas por Cortante (NTC-CDMX)")
+    st.caption("Cálculo de separación de estribos")
 
-# Cuantía Balanceada
-rho_b = (fc_biprima / fy) * ((6000 * beta1) / (6000 + fy))
+    col1_v, col2_v, col3_v = st.columns(3)
+    with col1_v:
+        st.subheader("Materiales")
+        fc_v = st.number_input("f'c (kg/cm²)", value=250, step=10, key="fc_v")
+        fy_v = st.number_input("fy estribos (kg/cm²)", value=4200, step=100, key="fy_v")
+    with col2_v:
+        st.subheader("Geometría")
+        b_v = st.number_input("Base, b (cm)", value=30, step=5, key="b_v")
+        h_v = st.number_input("Peralte Total, h (cm)", value=60, step=5, key="h_v")
+        rec_v = st.number_input("Recubrimiento, r (cm)", value=5, step=1, key="rec_v")
+    with col3_v:
+        st.subheader("Fuerzas y Acero")
+        Vu = st.number_input("Cortante Último, Vu (Ton)", value=15.0, step=1.0)
+        # Un estribo del #3 (3/8") tiene 2 ramas, su área es 2 * 0.71 = 1.42 cm2
+        Av = st.number_input("Área del estribo, Av (cm²)", value=1.42, help="Para estribo #3 con 2 ramas usa 1.42")
 
-# Cuantía Máxima (Usamos 0.75 rho_b para garantizar ductilidad en zonas sísmicas como BC)
-rho_max = 0.75 * rho_b 
+    d_v = h_v - rec_v
+    FR_v = 0.75 # Factor de resistencia para cortante
+    fc_star_v = 0.80 * fc_v
 
-# Cálculo del Área de Acero (As) para el Mu solicitado
-Mu_kgcm = Mu * 100000 # Conversión de Ton-m a kg-cm
+    # Resistencia del concreto al cortante (Vcr) simplificada
+    Vcr_kg = FR_v * 0.5 * math.sqrt(fc_star_v) * b_v * d_v
+    Vcr_ton = Vcr_kg / 1000
 
-# Constante de la ecuación cuadrática del bloque de Whitney
-# Ecuación: Mu = FR * b * d^2 * f''c * q(1 - 0.5q)
-coeficiente = Mu_kgcm / (FR * b * (d**2) * fc_biprima)
-
-try:
-    # Resolviendo para 'q' (índice de refuerzo)
-    q = 1 - math.sqrt(1 - (2 * coeficiente))
-    rho_req = q * (fc_biprima / fy)
-    As_req = rho_req * b * d
-    
-    As_min_cm2 = rho_min * b * d
-    As_max_cm2 = rho_max * b * d
-    
-    # 4. SALIDA DE RESULTADOS Y ALERTAS VISUALES
     st.markdown("---")
-    st.subheader("Resultados del Diseño")
-    
-    res_col1, res_col2, res_col3 = st.columns(3)
-    res_col1.metric("Acero Mínimo", f"{As_min_cm2:.2f} cm²", f"ρ = {rho_min:.4f}")
-    res_col2.metric("Acero Requerido (As)", f"{As_req:.2f} cm²", f"ρ = {rho_req:.4f}")
-    res_col3.metric("Acero Máximo (Dúctil)", f"{As_max_cm2:.2f} cm²", f"ρ = {rho_max:.4f}")
-    
-    # Validaciones Normativas (Verde = Pasa, Rojo = Falla)
-    if rho_req < rho_min:
-        st.warning(f"⚠️ El acero requerido es menor al mínimo normativo. Debes colocar **{As_min_cm2:.2f} cm²** por reglamento.")
-    elif rho_req > rho_max:
-        st.error(f"❌ ¡Falla! La sección está sobre-reforzada (falla frágil). Debes aumentar la geometría (b, h) o diseñar como viga doblemente reforzada.")
-    else:
-        st.success(f"✅ ¡Diseño Satisfactorio! La viga es simplemente reforzada y cumple los criterios de ductilidad.")
+    st.subheader("Resultados de Cortante")
+    st.write(f"Resistencia del concreto solo ($V_{{cR}}$): **{Vcr_ton:.2f} Ton**")
 
-except ValueError:
-    st.error("❌ El Momento Último es demasiado grande para esta sección transversal. La raíz cuadrada es imaginaria. ¡Aumenta el peralte (h) o la base (b)!")
+    if Vu <= Vcr_ton:
+        st.success("✅ El concreto resiste todo el cortante. Solo requieres estribos por especificación mínima.")
+        s_max = d_v / 2
+        st.info(f"Coloca estribos a una separación máxima de **{s_max:.2f} cm**.")
+    else:
+        # El acero debe resistir lo que le falta al concreto
+        Vsr_ton = Vu - Vcr_ton
+        st.warning(f"⚠️ El concreto NO resiste solo. Los estribos deben resistir: **{Vsr_ton:.2f} Ton**")
+        
+        # Fórmula: Vsr = (FR * Av * fy * d) / s  --> Despejamos 's' (separación)
+        Vsr_kg = Vsr_ton * 1000
+        separacion = (FR_v * Av * fy_v * d_v) / Vsr_kg
+        s_max = d_v / 2
+        
+        sep_final = min(separacion, s_max)
+        
+        st.metric("Separación de estribos calculada (s)", f"{sep_final:.1f} cm")
+        
+        if sep_final < 6.0:
+            st.error("❌ La separación es menor a 6 cm (muy juntos para colar). Usa estribos más gruesos (ej. #4) o aumenta la sección.")
+        else:
+            st.success(f"👷‍♂️ **Recomendación en obra:** Usa estribos del #3 separados a **{math.floor(sep_final)} cm**.")
+
+# ==========================================
+# MÓDULO 3: COLUMNAS (Placeholder)
+# ==========================================
+with tab_columnas:
+    st.info("Aquí agregaremos el diagrama de interacción para columnas con flexocompresión. ¡Pronto!")
